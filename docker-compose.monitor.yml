@@ -1,0 +1,161 @@
+version: '3.8'
+
+networks:
+  infra-network:
+    driver: bridge
+    name: infra-network
+
+services:
+
+  grafana:
+    container_name: grafana
+    depends_on:
+      - prometheus
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    image: grafana/grafana:latest
+    networks:
+      - infra-network
+    ports:
+      - '3000:3000'
+    restart: unless-stopped
+
+  kafka-broker:
+    container_name: kafka-broker
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-broker:9092, EXTERNAL://localhost:19092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT, EXTERNAL:PLAINTEXT
+      KAFKA_LOG_RETENTION_MS: -1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+    hostname: kafka-broker
+    image: confluentinc/cp-kafka:latest
+    networks:
+      - infra-network
+    ports:
+      - '19092:19092'
+    restart: unless-stopped
+    volumes:
+      - kafka-broker-volume:/var/lib/kafka/data
+  
+  kafka-schema-registry:
+    container_name: kafka-schema-registry
+    depends_on:
+      - kafka-broker
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: kafka-schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka-broker:9092'
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    hostname: kafka-schema-registry
+    image: confluentinc/cp-schema-registry:latest
+    networks:
+      - infra-network
+    ports:
+      - "8081:8081"
+
+  postgres:
+    container_name: postgres
+    environment:
+      POSTGRES_DB: local
+      POSTGRES_PASSWORD: senha123
+      POSTGRES_USER: postgres
+    hostname: postgres
+    image: postgres:latest
+    networks:
+      - infra-network
+    ports:
+      - '5432:5432'
+    restart: unless-stopped
+
+    volumes:
+      - postgres-volume:/var/lib/postgresql/data
+      - ./config/postgresql.conf:/docker-entrypoint-initdb.d/postgresql.conf
+
+  postgres-exporter:
+    container_name: postgres-exporter
+    depends_on:
+      - postgres
+      - prometheus
+      - grafana
+    environment:
+      DATA_SOURCE_NAME: postgresql://postgres:senha123@postgres:5432/local?sslmode=disable
+    image: prometheuscommunity/postgres-exporter
+    networks:
+      - infra-network
+    ports:
+      - '9187:9187'
+
+  prometheus:
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    container_name: prometheus
+    image: prom/prometheus:latest
+    networks:
+      - infra-network
+    ports:
+      - '9090:9090'
+    restart: unless-stopped
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-volume:/prometheus
+
+  redis:
+    command: redis-server --save "" --appendonly no --maxclients 20000
+    container_name: redis
+    environment:
+      REDIS_REPLICATION_MODE: master
+    hostname: redis
+    image: redis
+    networks:
+      - infra-network
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-volume:/data
+
+  redis-exporter:
+    container_name: redis-exporter
+    depends_on:
+      - redis
+      - prometheus
+      - grafana
+    environment:
+      REDIS_ADDR: redis:6379
+      REDIS_USER: null
+    image: oliver006/redis_exporter
+    networks:
+      - infra-network
+    ports:
+      - '9121:9121'
+
+  zookeeper:
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    hostname: zookeeper
+    image: confluentinc/cp-zookeeper:latest
+    networks:
+      - infra-network
+    ports:
+      - '22181:22181'
+    restart: unless-stopped
+    volumes:
+      - zookeeper-volume:/data
+      - zookeeper-volume:/opt/datalog
+
+volumes:
+  kafka-broker-volume:
+    name: kafka-broker-volume
+  postgres-volume:
+    name: postgres-volume
+  prometheus-volume:
+    name: prometheus-volume
+  redis-volume:
+    name: redis-volume
+  zookeeper-volume:
+    name: zookeeper-volume
