@@ -6,7 +6,6 @@ networks:
     name: infra-network
 
 services:
-
   grafana:
     container_name: grafana
     depends_on:
@@ -41,21 +40,49 @@ services:
     restart: unless-stopped
     volumes:
       - kafka-broker-volume:/var/lib/kafka/data
-  
+
   kafka-schema-registry:
     container_name: kafka-schema-registry
     depends_on:
       - kafka-broker
     environment:
       SCHEMA_REGISTRY_HOST_NAME: kafka-schema-registry
-      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka-broker:9092'
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka-broker:9092
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
     hostname: kafka-schema-registry
     image: confluentinc/cp-schema-registry:latest
     networks:
       - infra-network
     ports:
-      - "8081:8081"
+      - '8081:8081'
+
+  mongodb:
+    container_name: mongodb
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=root
+    image: mongo:jammy
+    networks:
+      - mongodb-network
+    ports:
+      - '27017:27017'
+    restart: unless-stopped
+    volumes:
+      - mongodb-data:/data/db
+
+  mysql:
+    command: '--default-authentication-plugin=mysql_native_password'
+    container_name: mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+    image: mysql:8.0
+    networks:
+      - mysql-network
+    ports:
+      - '3306:3306'
+    restart: unless-stopped
+    volumes:
+      - mysql-data:/var/lib/mysql
 
   postgres:
     container_name: postgres
@@ -70,24 +97,9 @@ services:
     ports:
       - '5432:5432'
     restart: unless-stopped
-
     volumes:
       - postgres-volume:/var/lib/postgresql/data
       - ./config/postgresql.conf:/docker-entrypoint-initdb.d/postgresql.conf
-
-  postgres-exporter:
-    container_name: postgres-exporter
-    depends_on:
-      - postgres
-      - prometheus
-      - grafana
-    environment:
-      DATA_SOURCE_NAME: postgresql://postgres:senha123@postgres:5432/local?sslmode=disable
-    image: prometheuscommunity/postgres-exporter
-    networks:
-      - infra-network
-    ports:
-      - '9187:9187'
 
   prometheus:
     command:
@@ -117,21 +129,6 @@ services:
     volumes:
       - redis-volume:/data
 
-  redis-exporter:
-    container_name: redis-exporter
-    depends_on:
-      - redis
-      - prometheus
-      - grafana
-    environment:
-      REDIS_ADDR: redis:6379
-      REDIS_USER: null
-    image: oliver006/redis_exporter
-    networks:
-      - infra-network
-    ports:
-      - '9121:9121'
-
   zookeeper:
     container_name: zookeeper
     environment:
@@ -151,6 +148,10 @@ services:
 volumes:
   kafka-broker-volume:
     name: kafka-broker-volume
+  mongodb-volume:
+    name: mongodb-volume
+  mysql-volume:
+    name: mysql-volume
   postgres-volume:
     name: postgres-volume
   prometheus-volume:
