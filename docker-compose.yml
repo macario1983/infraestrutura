@@ -13,7 +13,7 @@ services:
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: 'true'
       GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.0.5
     networks:
       - infra-network
     ports:
@@ -32,7 +32,7 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
     hostname: kafka-broker
-    image: confluentinc/cp-kafka:latest
+    image: confluentinc/cp-kafka:7.5.0
     networks:
       - infra-network
     ports:
@@ -44,13 +44,14 @@ services:
   kafka-schema-registry:
     container_name: kafka-schema-registry
     depends_on:
+      - zookeeper
       - kafka-broker
     environment:
       SCHEMA_REGISTRY_HOST_NAME: kafka-schema-registry
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka-broker:9092
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
     hostname: kafka-schema-registry
-    image: confluentinc/cp-schema-registry:latest
+    image: confluentinc/cp-schema-registry:7.5.0
     networks:
       - infra-network
     ports:
@@ -61,14 +62,14 @@ services:
     environment:
       - MONGO_INITDB_ROOT_USERNAME=root
       - MONGO_INITDB_ROOT_PASSWORD=root
-    image: mongo:jammy
+    image: mongo:7.0.0-jammy
     networks:
-      - mongodb-network
+      - infra-network
     ports:
       - '27017:27017'
     restart: unless-stopped
     volumes:
-      - mongodb-data:/data/db
+      - mongodb-volume:/data/db
 
   mysql:
     command: '--default-authentication-plugin=mysql_native_password'
@@ -77,12 +78,12 @@ services:
       - MYSQL_ROOT_PASSWORD=root
     image: mysql:8.0
     networks:
-      - mysql-network
+      - infra-network
     ports:
       - '3306:3306'
     restart: unless-stopped
     volumes:
-      - mysql-data:/var/lib/mysql
+      - mysql-volume:/var/lib/mysql
 
   postgres:
     container_name: postgres
@@ -91,7 +92,7 @@ services:
       POSTGRES_PASSWORD: senha123
       POSTGRES_USER: postgres
     hostname: postgres
-    image: postgres:latest
+    image: postgres:alpine3.18
     networks:
       - infra-network
     ports:
@@ -105,7 +106,7 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
     container_name: prometheus
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.46.0
     networks:
       - infra-network
     ports:
@@ -121,7 +122,7 @@ services:
     environment:
       REDIS_REPLICATION_MODE: master
     hostname: redis
-    image: redis
+    image: redis:7.2.0-alpine
     networks:
       - infra-network
     ports:
@@ -135,7 +136,7 @@ services:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     hostname: zookeeper
-    image: confluentinc/cp-zookeeper:latest
+    image: confluentinc/cp-zookeeper:7.5.0
     networks:
       - infra-network
     ports:
